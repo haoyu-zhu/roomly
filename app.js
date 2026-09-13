@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var LS = 'roomly.v1';
+  var LS = 'roomly.v2';
   var WD = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   var now = new Date();
   var M = now.getMonth() + 1;
@@ -15,10 +15,10 @@
       room: { name: '望京·南湖东园 4室1厅', since: 186, rule: 0.75 },
       me: 'u1',
       members: [
-        { id: 'u1', name: '我', real: '张扬', color: '#F2542D', room: '主卧·朝南', factor: 1.25, days: 30, coins: 111 },
-        { id: 'u2', name: '小林', color: '#0F8579', room: '次卧 A', factor: 1.0, days: 30, coins: 138 },
-        { id: 'u3', name: '阿哲', color: '#7C3AED', room: '次卧 B', factor: 0.95, days: 30, coins: 72 },
-        { id: 'u4', name: 'Mia', color: '#B45309', room: '北卧', factor: 0.8, days: 26, coins: 60 }
+        { id: 'u1', name: '我', real: '张扬', color: '#3A342E', room: '主卧·朝南', factor: 1.25, days: 30, coins: 111 },
+        { id: 'u2', name: '小林', color: '#4C7A63', room: '次卧 A', factor: 1.0, days: 30, coins: 138 },
+        { id: 'u3', name: '阿哲', color: '#5E5872', room: '次卧 B', factor: 0.95, days: 30, coins: 72 },
+        { id: 'u4', name: 'Mia', color: '#8A6A43', room: '北卧', factor: 0.8, days: 26, coins: 60 }
       ],
       credit: { u1: 0, u2: 0, u3: 0, u4: 0 },
       bills: [
@@ -297,9 +297,9 @@
     /* 健康度 */
     var sup = Math.round((S.supplies.length - lowSupplies().length) / S.supplies.length * 100);
     h += '<div class="sec-t">房间健康度</div><div class="health">' +
-      '<div class="h"><b style="color:' + (rate > .7 ? 'var(--teal)' : 'var(--brand)') + '">' + Math.round(rate * 100) + '%</b><span>账单结清率</span></div>' +
-      '<div class="h"><b style="color:' + (choreRate() > .7 ? 'var(--teal)' : 'var(--brand)') + '">' + Math.round(choreRate() * 100) + '%</b><span>值日完成率</span></div>' +
-      '<div class="h"><b style="color:' + (sup > 70 ? 'var(--teal)' : 'var(--brand)') + '">' + sup + '%</b><span>物资充足度</span></div></div>';
+      '<div class="h"><b style="color:' + (rate > .7 ? 'var(--teal)' : 'var(--alert)') + '">' + Math.round(rate * 100) + '%</b><span>账单结清率</span></div>' +
+      '<div class="h"><b style="color:' + (choreRate() > .7 ? 'var(--teal)' : 'var(--alert)') + '">' + Math.round(choreRate() * 100) + '%</b><span>值日完成率</span></div>' +
+      '<div class="h"><b style="color:' + (sup > 70 ? 'var(--teal)' : 'var(--alert)') + '">' + sup + '%</b><span>物资充足度</span></div></div>';
 
     return h;
   }
@@ -312,7 +312,7 @@
 
     h += '<div class="sum">' +
       '<div><div class="k">本月公共支出</div><div class="v">' + y0(monthTotal()) + '</div></div>' +
-      '<div><div class="k">我的净额</div><div class="v" style="color:' + (n >= 0 ? 'var(--teal)' : 'var(--brand)') + '">' + (n >= 0 ? '+' : '−') + yuan(Math.abs(n)).slice(1) + '</div></div></div>';
+      '<div><div class="k">我的净额</div><div class="v" style="color:' + (n >= 0 ? 'var(--teal)' : 'var(--alert)') + '">' + (n >= 0 ? '+' : '−') + yuan(Math.abs(n)).slice(1) + '</div></div></div>';
 
     h += '<div class="card" style="padding:13px 14px">' +
       '<div style="display:flex;gap:10px;align-items:center">' +
@@ -402,7 +402,7 @@
   function viewSupplies() {
     var h = '', low = lowSupplies();
     if (low.length) {
-      h += '<div class="card" style="background:var(--brand);color:#fff;border-radius:16px">' +
+      h += '<div class="card" style="background:var(--ink);color:#fff;border-radius:16px">' +
         '<div style="font-size:13.5px;font-weight:700">⚠️ ' + low.length + ' 样公共物资即将用完</div>' +
         '<div style="font-size:12px;opacity:.85;margin-top:4px;line-height:1.6">' +
         low.map(function (s) { return s.name + '（约 ' + Math.max(1, Math.round(s.stock / 100 * s.cycle)) + ' 天）'; }).join('、') +
@@ -415,7 +415,7 @@
     h += '<div class="sec-t">公共物资 · ' + S.supplies.length + ' 项<span class="more" onclick="A.addSupply()">+ 添加</span></div><div class="sup-grid">';
     S.supplies.forEach(function (s) {
       var days = Math.max(0, Math.round(s.stock / 100 * s.cycle));
-      var col = s.stock <= 25 ? 'var(--brand)' : s.stock <= 55 ? 'var(--amber)' : 'var(--teal)';
+      var col = s.stock <= 25 ? 'var(--alert)' : s.stock <= 55 ? 'var(--amber)' : 'var(--teal)';
       h += '<div class="sup' + (s.stock <= 25 ? ' low' : '') + '">' +
         (s.stock <= 25 ? '<span class="tagl">告急</span>' : '') +
         '<div class="e">' + s.emoji + '</div><div class="n">' + esc(s.name) + '</div>' +
@@ -561,7 +561,7 @@
           (b.method === 'days' ? '<span class="chip">在住 ' + m.days + ' 天</span>' : '') +
           (b.method === 'room' ? '<span class="chip">' + m.room + ' ×' + m.factor + '</span>' : '') +
           '<span class="m">' + yuan(sp[m.id]) + '</span>' +
-          '<span class="st" style="color:' + (ok ? 'var(--teal)' : 'var(--brand)') + '">' +
+          '<span class="st" style="color:' + (ok ? 'var(--teal)' : 'var(--alert)') + '">' +
           (m.id === b.payer ? '垫付方' : ok ? '✓ 已结' : '未结') + '</span></div>';
       });
       h += '</div>';
@@ -746,11 +746,11 @@
         line('我垫付的公共物资余量折价', supVal) +
         line('公共区域损坏扣减', 0) +
         '<div class="split-line" style="border-top:1.5px solid var(--line);margin-top:4px;padding-top:12px">' +
-        '<b style="font-size:15px">应退合计</b><span class="m" style="font-size:18px;color:var(--brand)">' + yuan(deposit + n + supVal) + '</span></div></div>';
+        '<b style="font-size:15px">应退合计</b><span class="m" style="font-size:18px;color:var(--ink)">' + yuan(deposit + n + supVal) + '</span></div></div>';
       h += '<div class="note-box">所有明细来自这半年真实记录的账本与物资登记，不依赖任何人的记忆。</div>';
       sheet('退租一键结算', h);
       function line(k, v) {
-        return '<div class="split-line"><span>' + k + '</span><span class="m" style="color:' + (v < 0 ? 'var(--brand)' : 'var(--ink)') + '">' +
+        return '<div class="split-line"><span>' + k + '</span><span class="m" style="color:' + (v < 0 ? 'var(--alert)' : 'var(--ink)') + '">' +
           (v < 0 ? '−' : '+') + yuan(Math.abs(v)).slice(1) + '</span></div>';
       }
     },
