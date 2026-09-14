@@ -42,7 +42,7 @@ button{cursor:pointer}
 .tb-avs .more{background:rgba(255,255,255,.13);color:#C9BFB9;font-size:10px}
 
 /* 滚动区 */
-.screen{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 15px 90px;-webkit-overflow-scrolling:touch}
+.screen{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 15px 142px;-webkit-overflow-scrolling:touch}
 .screen::-webkit-scrollbar{width:0}
 
 /* 通用 */
@@ -122,8 +122,10 @@ button{cursor:pointer}
 .split-line:last-child{border-bottom:0}
 .split-line .m{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
 .split-line .st{font-size:11px;font-weight:600}
-.fab{position:absolute;right:16px;bottom:84px;width:54px;height:54px;border-radius:18px;background:var(--brand);color:#fff;font-size:26px;display:grid;place-items:center;
-  box-shadow:0 8px 22px rgba(28,25,23,.28);z-index:20}
+.fab{position:absolute;right:14px;bottom:80px;height:48px;padding:0 17px 0 14px;border-radius:16px;background:var(--brand);color:#fff;
+  font-size:14.5px;font-weight:600;letter-spacing:-.2px;display:flex;align-items:center;gap:6px;
+  box-shadow:0 8px 22px rgba(28,25,23,.3);z-index:20}
+.fab .fp{font-size:18px;font-weight:400;line-height:1}
 .fab:active{transform:scale(.94)}
 
 /* 值日 */
@@ -279,6 +281,16 @@ button{cursor:pointer}
   50%{box-shadow:0 0 0 2.5px #17120F,0 0 0 11px rgba(23,18,15,.07),0 6px 20px rgba(23,18,15,.18)}}
 .tour-hi-rel{position:relative;z-index:22}
 .tour-on .screen{padding-bottom:230px}
+
+/* 编辑相关 */
+.btn.danger{background:var(--alert-soft);color:var(--alert);margin-top:9px}
+.btn.danger:active{background:#EFD9D3}
+.pen{font-size:11px;color:var(--ink4);margin-left:auto;flex:none}
+.pact .h .pen{margin-left:auto}
+.sup .n .pen{font-size:10px;opacity:.55}
+.undo{color:var(--alert);font-weight:600}
+.rng{width:100%;accent-color:var(--ink);margin-top:4px}
+.pick .nm{min-width:0}
 
 /* Toast */
 .toast{position:absolute;left:50%;bottom:104px;transform:translate(-50%,14px);background:rgba(23,18,15,.94);color:#fff;

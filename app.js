@@ -8,6 +8,12 @@
   var now = new Date();
   var M = now.getMonth() + 1;
   var todayNum = now.getDay() === 0 ? 7 : now.getDay(); // 1=周一 … 7=周日
+  // 本周标识（周一为一周之始）——用于跨周自动重置值日完成状态
+  function weekKey(dt) {
+    var d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+  }
 
   /* ---------- 种子数据 ---------- */
   function seed() {
@@ -69,6 +75,7 @@
         { id: 'v1', cat: '清洁', title: '冰箱分区与过期清理', text: '冰箱按人划分固定层格，每月最后一个周日集体清理过期食品。超过保质期的公共食材，由最后一次购买人负责处理。', by: 'u2', yes: ['u2', 'u4'], no: [] },
         { id: 'v2', cat: '费用', title: '空调电费单独计量', text: '夏季（6–9 月）各房间空调用电按房间独立电表计量，各付各的；公共区域空调仍按在住天数分摊。', by: 'u3', yes: ['u3'], no: ['u2'] }
       ],
+      week: weekKey(now),
       records: [
         { id: 'r1', p: '厨房即用即清', u: 'u3', on: M + '月4日' },
         { id: 'r2', p: '账单确认与结清时限', u: 'u4', on: M + '月2日' }
@@ -87,6 +94,11 @@
   if (!S.bills) S = seed();
   // 补齐历史数据：早于今天的值日自动标记完成
   S.shifts.forEach(function (s) { if (s.done === undefined) s.done = s.day < todayNum; });
+  // 新的一周：值日打卡全部清零（否则会出现「周二还没到却显示已完成」）
+  if (S.week !== weekKey(now)) {
+    S.shifts.forEach(function (s) { s.done = false; });
+    S.week = weekKey(now);
+  }
   // 让当前用户今天一定有一项值日（与原负责人对调，全周工作量总量不变）
   function ensureTodayTask() {
     var mine = S.shifts.filter(function (s) { return s.day === todayNum && s.u === S.me; });
@@ -416,7 +428,7 @@
     h += '</div>';
 
     /* 健康度 */
-    var sup = Math.round((S.supplies.length - lowSupplies().length) / S.supplies.length * 100);
+    var sup = S.supplies.length ? Math.round((S.supplies.length - lowSupplies().length) / S.supplies.length * 100) : 100;
     h += '<div class="sec-t">房间健康度</div><div class="health">' +
       '<div class="h"><b style="color:' + (rate > .7 ? 'var(--teal)' : 'var(--alert)') + '">' + Math.round(rate * 100) + '%</b><span>账单结清率</span></div>' +
       '<div class="h"><b style="color:' + (choreRate() > .7 ? 'var(--teal)' : 'var(--alert)') + '">' + Math.round(choreRate() * 100) + '%</b><span>值日完成率</span></div>' +
@@ -440,6 +452,9 @@
       '<div style="flex:1;font-size:12.5px;color:var(--ink3);line-height:1.6">待收 <b style="color:var(--teal)">' + yuan(get) + '</b> · 待付 <b style="color:var(--brand)">' + yuan(owe) + '</b></div>' +
       '<button class="btn sm js-settle" onclick="A.settle()">一键结清</button></div></div>';
 
+    if (!S.bills.length) {
+      return h + '<div class="card"><div class="empty"><span>\u{1F9FE}</span>还没有账单<br>点右下角「＋ 记一笔」，记下第一笔公共开销</div></div>';
+    }
     h += '<div class="sec-t">' + M + ' 月账单 · ' + S.bills.length + ' 笔<span class="more" onclick="A.moveOut()">退租结算单</span></div><div class="card tight">';
     S.bills.slice().reverse().forEach(function (b) {
       var sp = splitOf(b), ids = Object.keys(sp);
@@ -465,8 +480,11 @@
     var loads = S.members.map(function (m) { return { id: m.id, v: loadOf(m.id), c: m.color, n: m.name }; });
     var maxL = Math.max.apply(null, loads.map(function (l) { return l.v; })) || 1;
     var minL = Math.min.apply(null, loads.map(function (l) { return l.v; }));
-    var totalMin = loads.reduce(function (a, b) { return a + b.v; }, 0);
+    var totalMin = loads.reduce(function (a, b) { return a + b.v; }, 0) || 1;
 
+    if (!S.tasks.length) {
+      return '<div class="card"><div class="empty"><span>\u{1F9F9}</span>还没有家务任务<br>点右下角「＋ 加家务」，把倒垃圾、拖地这些列出来<br>系统会按耗时把每周工作量分匀</div></div>';
+    }
     var mine = S.shifts.filter(function (s) { return s.u === me; });
     var mineLeft = mine.filter(function (s) { return !s.done; });
 
@@ -493,8 +511,9 @@
         '<div class="d"><b>' + WD[d === 7 ? 0 : d] + '</b><span>' + (d === todayNum ? '今天' : '') + '</span></div><div class="tasks">';
       list.forEach(function (s) {
         var t = task(s.t), my = s.u === me;
-        h += '<div class="ttask' + (s.done ? ' done' : '') + '">' + avatar(s.u) +
-          '<span class="nm">' + t.emoji + ' ' + esc(t.name) + '</span>' +
+        h += '<div class="ttask' + (s.done ? ' done' : '') + '">' +
+          '<span onclick="A.editShift(\'' + s.id + '\')">' + avatar(s.u) + '</span>' +
+          '<span class="nm" onclick="A.editShift(\'' + s.id + '\')">' + t.emoji + ' ' + esc(t.name) + '</span>' +
           '<span class="mn">' + t.min + '′</span>' +
           (s.done ? '<span class="ck ok">✓ 已完成</span>'
             : my ? '<span class="ck" onclick="A.checkIn(\'' + s.id + '\')">打卡</span><span class="sw" onclick="A.swap(\'' + s.id + '\')">换班</span>'
@@ -533,13 +552,17 @@
       '<div style="font-size:12.5px;color:var(--ink3);flex:1;line-height:1.6">🛒 本轮采购轮到 <b style="color:var(--ink)">' + esc(nm(S.buyTurn)) + '</b><br>跑腿本身也算贡献，登记后 +5 家务币</div>' +
       avatar(S.buyTurn) + '</div>';
 
-    h += '<div class="sec-t">公共物资 · ' + S.supplies.length + ' 项<span class="more" onclick="A.addSupply()">+ 添加</span></div><div class="sup-grid">';
+    if (!S.supplies.length) {
+      return '<div class="card"><div class="empty"><span>\u{1F9FA}</span>还没有登记公共物资<br>点右下角「＋ 加物资」，把纸巾、洗洁精这些加进来<br>系统会预测什么时候该补货</div></div>';
+    }
+    h += '<div class="sec-t">公共物资 · ' + S.supplies.length + ' 项</div><div class="sup-grid">';
     S.supplies.forEach(function (s) {
       var days = Math.max(0, Math.round(s.stock / 100 * s.cycle));
       var col = s.stock <= 25 ? 'var(--alert)' : s.stock <= 55 ? 'var(--amber)' : 'var(--teal)';
       h += '<div class="sup' + (s.stock <= 25 ? ' low' : '') + '">' +
         (s.stock <= 25 ? '<span class="tagl">告急</span>' : '') +
-        '<div class="e">' + s.emoji + '</div><div class="n">' + esc(s.name) + '</div>' +
+        '<div class="e" onclick="A.editSupply(\'' + s.id + '\')">' + s.emoji + '</div>' +
+        '<div class="n" onclick="A.editSupply(\'' + s.id + '\')">' + esc(s.name) + ' <span class="pen">&#9998;</span></div>' +
         '<div class="bar"><i style="width:' + s.stock + '%;background:' + col + '"></i></div>' +
         '<div class="d">余量 ' + s.stock + '% · 约 ' + days + ' 天<br>上次 ' + esc(nm(s.by)) + ' 买于 ' + s.on + '</div>' +
         '<button class="buy" onclick="A.buy(\'' + s.id + '\')">我买了，登记一下</button></div>';
@@ -558,6 +581,9 @@
       '<div style="font-size:26px;font-weight:800;margin:5px 0 3px;letter-spacing:-.8px">' + S.pacts.length + ' 条</div>' +
       '<div style="font-size:11.5px;color:#9C938D">全员签署 · 新室友入住即自动生效 · ' + need + '/' + S.members.length + ' 同意即可通过</div></div>';
 
+    if (!S.pacts.length && !S.votes.length) {
+      return '<div class="card"><div class="empty"><span>\u{1F4DC}</span>还没有任何公约<br>点右下角「＋ 发起提案」，把访客、噪音、清洁这些<br>在吵架之前先约定好</div></div>';
+    }
     if (S.votes.length) {
       h += '<div class="sec-t">投票中 · ' + S.votes.length + '</div>';
       S.votes.forEach(function (v) {
@@ -566,7 +592,8 @@
           '<span class="chip a">' + v.cat + '</span><b style="font-size:14.5px">' + esc(v.title) + '</b></div>' +
           '<div class="pact" style="box-shadow:none;padding:0;margin:0"><div class="tx">' + esc(v.text) + '</div></div>' +
           '<div class="prog"><i style="width:' + (v.yes.length / S.members.length * 100) + '%"></i><u style="width:' + (v.no.length / S.members.length * 100) + '%"></u></div>' +
-          '<div style="font-size:11.5px;color:var(--ink3)">' + esc(nm(v.by)) + ' 发起 · 同意 ' + v.yes.length + ' / 反对 ' + v.no.length + ' · 还差 ' + Math.max(0, need - v.yes.length) + ' 票生效</div>' +
+          '<div style="font-size:11.5px;color:var(--ink3)">' + esc(nm(v.by)) + ' 发起 · 同意 ' + v.yes.length + ' / 反对 ' + v.no.length + ' · 还差 ' + Math.max(0, need - v.yes.length) + ' 票生效' +
+          (v.by === me ? ' · <span class="undo" onclick="A.dropVote(\'' + v.id + '\')">撤回</span>' : '') + '</div>' +
           '<div class="acts">' + (voted
             ? '<div class="voted">你已投「' + (voted === 'yes' ? '同意' : '反对') + '」，等待其他室友</div>'
             : '<button class="yes" onclick="A.vote(\'' + v.id + '\',1)">同意</button><button class="no" onclick="A.vote(\'' + v.id + '\',0)">反对</button>') +
@@ -574,9 +601,9 @@
       });
     }
 
-    h += '<div class="sec-t">已生效条款<span class="more" onclick="A.propose()">+ 发起提案</span></div>';
+    h += '<div class="sec-t">已生效条款 · ' + S.pacts.length + '</div>';
     S.pacts.forEach(function (p) {
-      h += '<div class="pact"><div class="h"><span class="chip b">' + p.cat + '</span><b>' + esc(p.title) + '</b></div>' +
+      h += '<div class="pact" onclick="A.editPact(\'' + p.id + '\')"><div class="h"><span class="chip b">' + p.cat + '</span><b>' + esc(p.title) + '</b><span class="pen">&#9998;</span></div>' +
         '<div class="tx">' + esc(p.text) + '</div>' +
         '<div class="f">✅ ' + p.vote + ' 通过 · ' + p.on + ' 生效</div></div>';
     });
@@ -595,15 +622,24 @@
 
   /* ---------- 渲染 ---------- */
   var VIEWS = { home: viewHome, bills: viewBills, chores: viewChores, supplies: viewSupplies, pact: viewPact };
+  var FABS = {
+    bills: { t: '记一笔', fn: 'addBill' },
+    chores: { t: '加家务', fn: 'addTask' },
+    supplies: { t: '加物资', fn: 'addSupply' },
+    pact: { t: '发起提案', fn: 'propose' }
+  };
   function render() {
     renderTop();
     var sc = $('screen');
     sc.innerHTML = VIEWS[S.tab]();
     sc.scrollTop = 0;
     var old = document.querySelector('.fab'); if (old) old.remove();
-    if (S.tab === 'bills') {
+    var fab = FABS[S.tab];
+    if (fab) {
       var f = document.createElement('button');
-      f.className = 'fab'; f.innerHTML = '+'; f.onclick = function () { A.addBill(); };
+      f.className = 'fab';
+      f.innerHTML = '<span class="fp">＋</span>' + fab.t;
+      f.onclick = function () { A[fab.fn](); };
       document.querySelector('.device-screen').appendChild(f);
     }
     [].forEach.call(document.querySelectorAll('.tab'), function (t) {
@@ -703,6 +739,7 @@
       if (sp[S.me] !== undefined && S.me !== b.payer && !b.paid[S.me]) {
         h += '<button class="btn" onclick="A.payOne(\'' + b.id + '\')">我已转账 ' + yuan(sp[S.me]) + '</button>';
       }
+      h += '<button class="btn line" onclick="A.editBill(\'' + b.id + '\')">编辑 / 删除这笔账</button>';
       sheet(b.title, h);
     },
     payOne: function (id) {
@@ -965,6 +1002,182 @@
       toast('🗳️ 提案已发起，管家已通知全体室友投票');
     },
 
+
+    /* ---- 物资：编辑 / 删除 ---- */
+    editSupply: function (id) {
+      var s = S.supplies.filter(function (x) { return x.id === id; })[0];
+      if (!s) return;
+      var h = '<div class="fl">名称</div><input class="inp" id="esName" value="' + esc(s.name) + '">' +
+        '<div class="fl">图标</div><div class="chips" id="esEmoji">' +
+        ['\u{1F9FB}', '\u{1F6CD}', '\u{1F9F4}', '\u{1F9FC}', '\u{1F9FD}', '\u{1F4A1}', '\u{1F9FA}', '\u{1F50B}', '\u2615', '\u{1F9C2}', '\u{1F9CA}', '\u{1FAA3}'].map(function (e) {
+          return '<button class="ch' + (e === s.emoji ? ' on' : '') + '" data-e="' + e + '" onclick="A.pickOne(this,\'esEmoji\')" style="font-size:18px">' + e + '</button>';
+        }).join('') + '</div>' +
+        '<div class="fl">大约多久用完一瓶 / 一包（天）</div><input class="inp" id="esCycle" type="number" value="' + s.cycle + '">' +
+        '<div class="fl">当前余量：<b id="esVal">' + s.stock + '%</b></div>' +
+        '<input class="rng" id="esStock" type="range" min="0" max="100" value="' + s.stock + '" oninput="document.getElementById(\'esVal\').textContent=this.value+\'%\'">' +
+        '<button class="btn" onclick="A.saveSupply(\'' + s.id + '\')">保存</button>' +
+        '<button class="btn danger" onclick="A.delSupply(\'' + s.id + '\')">删除这项物资</button>';
+      sheet('编辑物资', h);
+    },
+    saveSupply: function (id) {
+      var s = S.supplies.filter(function (x) { return x.id === id; })[0];
+      var n = $('esName').value.trim();
+      if (!n) { toast('名称不能为空'); return; }
+      s.name = n;
+      s.emoji = $('esEmoji').querySelector('.on').dataset.e;
+      s.cycle = parseInt($('esCycle').value) || 30;
+      s.stock = parseInt($('esStock').value);
+      closeSheet(); render(); toast('\u2705 已保存');
+    },
+    delSupply: function (id) {
+      S.supplies = S.supplies.filter(function (x) { return x.id !== id; });
+      closeSheet(); render(); toast('已删除');
+    },
+
+    /* ---- 公约：编辑 / 废除 / 撤回提案 ---- */
+    editPact: function (id) {
+      var p = S.pacts.filter(function (x) { return x.id === id; })[0];
+      if (!p) return;
+      var h = '<div class="fl">分类</div><div class="chips" id="epCat">' +
+        ['访客', '噪音', '清洁', '费用', '厨房', '宠物', '退租'].map(function (c) {
+          return '<button class="ch' + (c === p.cat ? ' on' : '') + '" data-c="' + c + '" onclick="A.pickOne(this,\'epCat\')">' + c + '</button>';
+        }).join('') + '</div>' +
+        '<div class="fl">标题</div><input class="inp" id="epTitle" value="' + esc(p.title) + '">' +
+        '<div class="fl">条款内容</div><textarea class="inp" id="epText" rows="5" style="resize:none;line-height:1.7">' + esc(p.text) + '</textarea>' +
+        '<div class="note-box">修改已生效的条款会记为一次版本更新，并由管家通知全体室友。</div>' +
+        '<button class="btn" onclick="A.savePact(\'' + p.id + '\')">保存修改</button>' +
+        '<button class="btn danger" onclick="A.delPact(\'' + p.id + '\')">废除这条公约</button>';
+      sheet('编辑公约', h);
+    },
+    savePact: function (id) {
+      var p = S.pacts.filter(function (x) { return x.id === id; })[0];
+      var t = $('epTitle').value.trim(), x = $('epText').value.trim();
+      if (!t || !x) { toast('标题和内容都要填'); return; }
+      p.cat = $('epCat').querySelector('.on').dataset.c; p.title = t; p.text = x;
+      p.on = M + '月' + now.getDate() + '日';
+      closeSheet(); render(); toast('\u2705 已更新，管家已通知全体室友');
+    },
+    delPact: function (id) {
+      S.pacts = S.pacts.filter(function (x) { return x.id !== id; });
+      closeSheet(); render(); toast('该条公约已废除');
+    },
+    dropVote: function (id) {
+      S.votes = S.votes.filter(function (x) { return x.id !== id; });
+      render(); toast('提案已撤回');
+    },
+
+    /* ---- 值日：添加家务 / 调整排班 / 删除 ---- */
+    addTask: function () {
+      var h = '<div class="fl">家务名称</div><input class="inp" id="tkName" placeholder="例如：擦厨房油烟机">' +
+        '<div class="fl">图标</div><div class="chips" id="tkEmoji">' +
+        ['\u{1F9F9}', '\u{1F5D1}', '\u{1F373}', '\u{1F6BF}', '\u{1FAB4}', '\u{1F9FD}', '\u{1F9FC}', '\u{1FA9F}', '\u{1F6CB}', '\u{1F9FA}'].map(function (e, i) {
+          return '<button class="ch' + (i === 0 ? ' on' : '') + '" data-e="' + e + '" onclick="A.pickOne(this,\'tkEmoji\')" style="font-size:18px">' + e + '</button>';
+        }).join('') + '</div>' +
+        '<div class="fl">一次大约要花多久（分钟）</div><input class="inp" id="tkMin" type="number" value="15">' +
+        '<div class="fl">每周做几次</div><div class="chips" id="tkFreq">' +
+        [1, 2, 3, 7].map(function (n, i) {
+          return '<button class="ch' + (i === 0 ? ' on' : '') + '" data-n="' + n + '" onclick="A.pickOne(this,\'tkFreq\')">' + (n === 7 ? '每天' : '每周 ' + n + ' 次') + '</button>';
+        }).join('') + '</div>' +
+        '<div class="note-box">耗时决定排班：新家务会自动分给当前本周工作量最少的人，让每人的总分钟数尽量接近。</div>' +
+        '<button class="btn" onclick="A.doAddTask()">添加并排进本周</button>';
+      sheet('添加家务', h);
+    },
+    doAddTask: function () {
+      var n = $('tkName').value.trim();
+      if (!n) { toast('请填写家务名称'); return; }
+      var t = {
+        id: 't' + Date.now(), name: n,
+        emoji: $('tkEmoji').querySelector('.on').dataset.e,
+        min: parseInt($('tkMin').value) || 10
+      };
+      var freq = parseInt($('tkFreq').querySelector('.on').dataset.n);
+      S.tasks.push(t);
+      var days = freq === 7 ? [1, 2, 3, 4, 5, 6, 7] : freq === 3 ? [1, 4, 6] : freq === 2 ? [3, 6] : [6];
+      days.forEach(function (d, i) {
+        var light = S.members.slice().sort(function (a, b) { return loadOf(a.id) - loadOf(b.id); })[0];
+        S.shifts.push({ id: 'a' + Date.now() + '_' + i, t: t.id, u: light.id, day: d, done: false });
+      });
+      closeSheet(); S.tab = 'chores'; render();
+      toast('\u2705 已加入本周排班<br><span style="font-size:11.5px;opacity:.7">自动分给了当前工作量最少的人</span>');
+    },
+    editShift: function (id) {
+      var s = S.shifts.filter(function (x) { return x.id === id; })[0];
+      if (!s) return;
+      var t = task(s.t);
+      var h = '<div class="card" style="text-align:center;padding:16px">' +
+        '<div style="font-size:28px">' + t.emoji + '</div>' +
+        '<div style="font-weight:700;margin-top:5px">' + esc(t.name) + '</div>' +
+        '<div style="font-size:12px;color:var(--ink3);margin-top:3px">' + WD[s.day === 7 ? 0 : s.day] + ' \u00b7 ' + t.min + ' 分钟</div></div>';
+      h += '<div class="fl">这次由谁做</div><div class="picker">';
+      S.members.forEach(function (m) {
+        h += '<div class="pick' + (m.id === s.u ? ' on' : '') + '" onclick="A.setShiftUser(\'' + s.id + '\',\'' + m.id + '\')">' + avatar(m.id) +
+          '<span class="nm">' + esc(m.name) + '</span>' +
+          '<span style="font-size:11.5px;color:var(--ink3);margin-right:8px">本周 ' + loadOf(m.id) + ' 分钟</span>' +
+          '<span class="box">\u2713</span></div>';
+      });
+      h += '</div><div class="fl">哪一天</div><div class="chips">' +
+        [1, 2, 3, 4, 5, 6, 7].map(function (d) {
+          return '<button class="ch' + (d === s.day ? ' on' : '') + '" onclick="A.setShiftDay(\'' + s.id + '\',' + d + ')">' + WD[d === 7 ? 0 : d] + '</button>';
+        }).join('') + '</div>' +
+        '<button class="btn line" onclick="A.delShift(\'' + s.id + '\')">删掉这一次</button>' +
+        '<button class="btn danger" onclick="A.delTask(\'' + s.t + '\')">删除「' + esc(t.name) + '」这项家务</button>';
+      sheet('调整排班', h);
+    },
+    setShiftUser: function (id, uid) {
+      var s = S.shifts.filter(function (x) { return x.id === id; })[0];
+      s.u = uid; closeSheet(); render(); toast('已改为由' + esc(nm(uid)) + '负责');
+    },
+    setShiftDay: function (id, d) {
+      var s = S.shifts.filter(function (x) { return x.id === id; })[0];
+      s.day = d; s.done = false; closeSheet(); render(); toast('已改到' + WD[d === 7 ? 0 : d]);
+    },
+    delShift: function (id) {
+      S.shifts = S.shifts.filter(function (x) { return x.id !== id; });
+      closeSheet(); render(); toast('已删除这一次');
+    },
+    delTask: function (tid) {
+      S.tasks = S.tasks.filter(function (x) { return x.id !== tid; });
+      S.shifts = S.shifts.filter(function (x) { return x.t !== tid; });
+      closeSheet(); render(); toast('已删除这项家务及其全部排班');
+    },
+
+    /* ---- 账单：编辑 / 删除 ---- */
+    editBill: function (id) {
+      var b = S.bills.filter(function (x) { return x.id === id; })[0];
+      if (!b) return;
+      var h = '<div class="fl">说明</div><input class="inp" id="ebTitle" value="' + esc(b.title) + '">' +
+        '<div class="fl">金额</div><input class="inp" id="ebAmt" type="number" value="' + b.amount + '">' +
+        '<div class="fl">谁垫付的</div><div class="chips" id="ebPayer">' +
+        S.members.map(function (m) {
+          return '<button class="ch' + (m.id === b.payer ? ' on' : '') + '" data-u="' + m.id + '" onclick="A.pickOne(this,\'ebPayer\')">' + esc(m.name) + '</button>';
+        }).join('') + '</div>' +
+        '<div class="fl">分摊方式</div><div class="chips" id="ebMethod">' +
+        Object.keys(METHODS).filter(function (k) { return k !== 'custom'; }).map(function (k) {
+          return '<button class="ch' + (k === b.method ? ' on' : '') + '" data-m="' + k + '" onclick="A.pickOne(this,\'ebMethod\')">' + METHODS[k].name + '</button>';
+        }).join('') + '</div>' +
+        '<div class="note-box">改动会重新计算每个人的分摊金额；已结清的状态保持不变。</div>' +
+        '<button class="btn" onclick="A.saveBill2(\'' + b.id + '\')">保存</button>' +
+        '<button class="btn danger" onclick="A.delBill(\'' + b.id + '\')">删除这笔账</button>';
+      sheet('编辑账单', h);
+    },
+    saveBill2: function (id) {
+      var b = S.bills.filter(function (x) { return x.id === id; })[0];
+      var a = parseFloat($('ebAmt').value);
+      if (!a) { toast('金额不能为空'); return; }
+      b.title = $('ebTitle').value.trim() || b.title;
+      b.amount = a;
+      b.payer = $('ebPayer').querySelector('.on').dataset.u;
+      var m = $('ebMethod').querySelector('.on').dataset.m;
+      if (m === 'picked' && !b.picked) b.picked = S.members.map(function (x) { return x.id; });
+      if (m !== 'picked') b.picked = null;
+      b.method = m; b.custom = null;
+      closeSheet(); render(); toast('\u2705 已保存，分摊已重算');
+    },
+    delBill: function (id) {
+      S.bills = S.bills.filter(function (x) { return x.id !== id; });
+      closeSheet(); render(); toast('已删除这笔账');
+    },
+
     /* 其他 */
     coinsInfo: function () {
       sheet('家务币怎么算', '<div class="pact" style="box-shadow:none;background:transparent;padding:0"><div class="tx">' +
@@ -976,22 +1189,103 @@
         '</div></div>');
     },
     settings: function () {
-      var h = '<div class="fl">室友 · ' + S.members.length + ' 人</div><div class="picker">';
+      var h = '<div class="fl">房间名称</div>' +
+        '<div class="pick" onclick="A.editRoom()"><span class="nm">' + esc(S.room.name) + '</span><span class="pen">&#9998;</span></div>';
+      h += '<div class="fl">室友 · ' + S.members.length + ' 人<span style="float:right;color:var(--ink3);font-weight:400">点头像可编辑</span></div><div class="picker">';
       S.members.forEach(function (m) {
-        h += '<div class="pick">' + avatar(m.id) + '<span class="nm">' + esc(m.name) + (isMe(m.id) ? '（我）' : '') +
-          '<span style="display:block;font-size:11.5px;color:var(--ink3);font-weight:400">' + m.room + ' · 系数 ×' + m.factor + ' · ' + m.coins + ' 家务币</span></span></div>';
+        h += '<div class="pick" onclick="A.editMember(\'' + m.id + '\')">' + avatar(m.id) +
+          '<span class="nm">' + esc(m.name) + (isMe(m.id) ? '（我）' : '') +
+          '<span style="display:block;font-size:11.5px;color:var(--ink3);font-weight:400">' + esc(m.room) + ' \u00b7 系数 \u00d7' + m.factor + ' \u00b7 在住 ' + m.days + ' 天 \u00b7 ' + m.coins + ' 家务币</span></span>' +
+          '<span class="pen">&#9998;</span></div>';
       });
-      h += '</div>';
-      h += '<div class="fl">房间设置</div><div class="card">' +
+      h += '</div><button class="btn ghost" onclick="A.addMember()">+ 添加室友</button>';
+      h += '<div class="fl">房间规则</div><div class="card">' +
         '<div class="split-line"><span>公约通过门槛</span><span class="m">' + Math.ceil(S.members.length * S.room.rule) + ' / ' + S.members.length + '</span></div>' +
         '<div class="split-line"><span>账单结清截止日</span><span class="m">每月 10 日</span></div>' +
         '<div class="split-line"><span>催收方式</span><span class="m">管家统一提醒</span></div></div>';
-      h += '<button class="btn ghost" onclick="A.invite()">邀请新室友</button>' +
+      h += '<div class="fl">数据</div>' +
+        '<button class="btn ghost" onclick="A.invite()">邀请新室友</button>' +
         '<button class="btn line" onclick="A.tourStart()">重看功能讲解</button>' +
-        '<button class="btn line" onclick="A.onbShow()">重看欢迎页</button>' +
-        '<button class="btn line" onclick="A.reset()">重置演示数据</button>' +
-        '<button class="btn line" onclick="A.resetAll()">恢复到「首次打开」状态</button>';
+        '<button class="btn line" onclick="A.reset()">恢复演示数据</button>' +
+        '<button class="btn danger" onclick="A.clearAsk()">清空，开始记我自己的</button>';
       sheet('房间设置', h);
+    },
+    editRoom: function () {
+      sheet('房间名称', '<div class="fl">叫什么</div><input class="inp" id="rmName" value="' + esc(S.room.name) + '">' +
+        '<div class="fl">已同住天数</div><input class="inp" id="rmDays" type="number" value="' + S.room.since + '">' +
+        '<button class="btn" onclick="A.saveRoom()">保存</button>');
+    },
+    saveRoom: function () {
+      var n = $('rmName').value.trim();
+      if (n) S.room.name = n;
+      S.room.since = parseInt($('rmDays').value) || 0;
+      A.settings(); render(); toast('\u2705 已保存');
+    },
+    editMember: function (id) {
+      var m = mem(id);
+      var h = '<div class="fl">昵称</div><input class="inp" id="mbName" value="' + esc(m.name) + '">' +
+        '<div class="fl">住哪间</div><input class="inp" id="mbRoom" value="' + esc(m.room) + '">' +
+        '<div class="fl">房间系数（房租按面积分摊时用，主卧 1.2 左右，次卧 1.0）</div>' +
+        '<input class="inp" id="mbFactor" type="number" step="0.05" value="' + m.factor + '">' +
+        '<div class="fl">本月在住天数（水电按天分摊时用）</div><input class="inp" id="mbDays" type="number" value="' + m.days + '">' +
+        '<button class="btn" onclick="A.saveMember(\'' + id + '\')">保存</button>' +
+        (S.members.length > 2 && !isMe(id) ? '<button class="btn danger" onclick="A.delMember(\'' + id + '\')">移除这位室友</button>' : '');
+      sheet('编辑室友', h);
+    },
+    saveMember: function (id) {
+      var m = mem(id);
+      m.name = $('mbName').value.trim() || m.name;
+      m.room = $('mbRoom').value.trim() || m.room;
+      m.factor = parseFloat($('mbFactor').value) || 1;
+      m.days = parseInt($('mbDays').value) || 30;
+      A.settings(); render(); toast('\u2705 已保存');
+    },
+    addMember: function () {
+      var colors = ['#3A342E', '#4C7A63', '#5E5872', '#8A6A43', '#6B5344', '#41606E'];
+      var h = '<div class="fl">昵称</div><input class="inp" id="nmName" placeholder="室友怎么称呼">' +
+        '<div class="fl">住哪间</div><input class="inp" id="nmRoom" placeholder="例如：次卧 B">' +
+        '<div class="fl">房间系数</div><input class="inp" id="nmFactor" type="number" step="0.05" value="1">' +
+        '<div class="fl">本月在住天数</div><input class="inp" id="nmDays" type="number" value="30">' +
+        '<div class="note-box">加入后，之后新记的账会自动把他算进分摊；已有的账单不受影响。</div>' +
+        '<button class="btn" onclick="A.doAddMember()">添加</button>';
+      sheet('添加室友', h);
+    },
+    doAddMember: function () {
+      var n = $('nmName').value.trim();
+      if (!n) { toast('请填写昵称'); return; }
+      var colors = ['#3A342E', '#4C7A63', '#5E5872', '#8A6A43', '#6B5344', '#41606E'];
+      var id = 'u' + Date.now();
+      S.members.push({
+        id: id, name: n, color: colors[S.members.length % colors.length],
+        room: $('nmRoom').value.trim() || '未填', factor: parseFloat($('nmFactor').value) || 1,
+        days: parseInt($('nmDays').value) || 30, coins: 0
+      });
+      S.credit[id] = 0;
+      A.settings(); render(); toast('\u2705 已加入房间');
+    },
+    delMember: function (id) {
+      S.members = S.members.filter(function (m) { return m.id !== id; });
+      S.shifts = S.shifts.filter(function (s) { return s.u !== id; });
+      S.bills.forEach(function (b) { if (b.picked) b.picked = b.picked.filter(function (x) { return x !== id; }); });
+      S.bills = S.bills.filter(function (b) { return b.payer !== id; });
+      delete S.credit[id];
+      A.settings(); render(); toast('已移除');
+    },
+    clearAsk: function () {
+      sheet('清空全部数据', '<div class="note-box" style="background:var(--alert-soft);color:var(--alert)">' +
+        '将删除：所有账单、值日任务与打卡、公共物资、公约与提案、家务币。<br><br>' +
+        '将保留：房间名称和室友名单（可在上一页继续修改）。<br><br>' +
+        '<b>此操作不可撤销。</b>如果只是想看演示数据，请用「恢复演示数据」。</div>' +
+        '<button class="btn danger" onclick="A.doClear()">确认清空，开始记我自己的</button>' +
+        '<button class="btn line" onclick="A.settings()">再想想</button>');
+    },
+    doClear: function () {
+      S.bills = []; S.tasks = []; S.shifts = []; S.supplies = [];
+      S.pacts = []; S.votes = []; S.records = [];
+      S.members.forEach(function (m) { m.coins = 0; S.credit[m.id] = 0; });
+      S.buyTurn = S.me;
+      closeSheet(); S.tab = 'home'; render();
+      toast('\u2728 已清空<br><span style="font-size:11.5px;opacity:.7">每个页面右下角都有添加按钮，从记第一笔开始</span>');
     },
     invite: function () {
       closeSheet();

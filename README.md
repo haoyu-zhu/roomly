@@ -40,7 +40,11 @@
 - 公约提案投票，达到 3/4 实时生效
 - 退租一键结算单
 
-深链接：`?tab=bills` / `?tab=chores` / `?tab=supplies` / `?tab=pact`，`?sheet=settle` 可直接打开结清面板。
+每个页面右下角都有创建按钮（记一笔 / 加家务 / 加物资 / 发起提案），所有条目都可编辑和删除。
+
+想当成真工具用：「⋯ 房间」→ 改房间名与室友 → 「清空，开始记我自己的」。
+
+深链接：`?tab=bills` / `?tab=chores` / `?tab=supplies` / `?tab=pact`，`?sheet=settle` 直接打开结清面板，`?onb=1` 重看引导。
 
 ---
 纯静态站点，无构建步骤，GitHub Pages 直接部署。
