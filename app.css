@@ -279,6 +279,9 @@ button{cursor:pointer}
   animation:hiPulse 1.6s ease-in-out infinite}
 @keyframes hiPulse{0%,100%{box-shadow:0 0 0 2.5px #17120F,0 0 0 7px rgba(23,18,15,.13),0 6px 20px rgba(23,18,15,.18)}
   50%{box-shadow:0 0 0 2.5px #17120F,0 0 0 11px rgba(23,18,15,.07),0 6px 20px rgba(23,18,15,.18)}}
+.tour-hi-light{box-shadow:0 0 0 2.5px #F4EFE3,0 0 0 7px rgba(244,239,227,.20)!important;animation:hiPulseL 1.6s ease-in-out infinite}
+@keyframes hiPulseL{0%,100%{box-shadow:0 0 0 2.5px #F4EFE3,0 0 0 7px rgba(244,239,227,.20)}
+  50%{box-shadow:0 0 0 2.5px #F4EFE3,0 0 0 11px rgba(244,239,227,.10)}}
 .tour-hi-rel{position:relative;z-index:22}
 .tour-on .screen{padding-bottom:230px}
 

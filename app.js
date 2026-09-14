@@ -254,7 +254,7 @@
     h += '</div><div class="onb-foot onb-anim" style="animation-delay:.36s">' +
       '<button class="btn" data-onb="tour">开始体验 · 带我看一遍</button>' +
       '<button class="btn line" data-onb="skip" style="margin-top:9px">跳过讲解，直接用</button>' +
-      '<p>可交互原型 · 记一笔账、打个卡、投一票都会真实生效<br>数据只存在你本机浏览器，可随时在「⋯ 房间」里重置</p>' +
+      '<p>房间里是演示数据，点着玩不会有后果<br>想记自己的：「⋯ 房间」→「清空，开始记我自己的」</p>' +
       '</div></div>';
     $('onb').innerHTML = h;
   }
@@ -292,12 +292,19 @@
       tab: 'pact', sel: '.vote', title: '公约 · 提案投票生效',
       why: '规矩要在吵架之前定好，而且得有生效流程——不能谁先住进来谁说了算。',
       how: '任何人都能发起提案，全员投票，3/4 同意立刻生效并写进条款；新室友入住自动适用。'
+    },
+    {
+      tab: 'home', sel: '.tb-btn', light: 1, title: '换成你自己的合租生活',
+      why: '你现在看到的房租、室友、账单、物资全是演示数据，只为让你一眼看明白产品怎么用——它们不是你的。',
+      how: '点右上角「⋯ 房间」：先改房间名、加减室友、填好各自的房间系数和在住天数；' +
+        '再点最下面的<b style="color:#fff">「清空，开始记我自己的」</b>，会清掉全部演示账单/家务/物资/公约（保留房间和室友），' +
+        '然后从每页右下角的「＋」开始记第一条。'
     }
   ];
   var tourI = -1;
   function tourClear() {
-    [].forEach.call(document.querySelectorAll('.tour-hi,.tour-hi-rel'), function (e) {
-      e.classList.remove('tour-hi'); e.classList.remove('tour-hi-rel');
+    [].forEach.call(document.querySelectorAll('.tour-hi,.tour-hi-rel,.tour-hi-light'), function (e) {
+      e.classList.remove('tour-hi'); e.classList.remove('tour-hi-rel'); e.classList.remove('tour-hi-light');
     });
   }
   function tourEnd() {
@@ -310,7 +317,7 @@
     if (i < 0) i = 0;
     if (i >= TOUR.length) {
       tourEnd(); render();
-      toast('讲解结束 · 现在随便点<br><span style="font-size:11.5px;opacity:.7">记一笔账、打个卡、投一票都会真实生效</span>');
+      toast('讲解结束 · 先随便点着玩<br><span style="font-size:11.5px;opacity:.7">要开始记自己的，就去「⋯ 房间」清空演示数据</span>');
       return;
     }
     tourI = i;
@@ -325,6 +332,7 @@
       t.classList.remove('top');
       if (!el) return;
       el.classList.add('tour-hi');
+      if (s.light) el.classList.add('tour-hi-light');
       if (getComputedStyle(el).position === 'static') el.classList.add('tour-hi-rel');
       // 只滚动内容区；scrollIntoView 会连 overflow:hidden 的外壳一起滚，必须复位
       var box0 = document.querySelector('.device-screen');
@@ -393,6 +401,13 @@
       todos.push({ e: '🗳️', bg: 'var(--teal-soft)', b: needVote.length + ' 条公约提案等你投票', s: '「' + needVote[0].title + '」等 ' + needVote.length + ' 条', btn: '去投票', act: "A.go('pact')", gh: 1 });
     }
 
+    if (!S.bills.length && !S.tasks.length && !S.supplies.length && !S.pacts.length) {
+      h += '<div class="card" style="background:var(--night);color:#fff;border-radius:18px">' +
+        '<div style="font-size:14.5px;font-weight:700">\u2728 空房间已就绪</div>' +
+        '<div style="font-size:12.5px;color:#B8AFA9;line-height:1.75;margin-top:6px">' +
+        '从下面这四件事开始：账本记第一笔公共开销、值日把家务列出来、物资登记纸巾洗洁精、公约把访客和噪音先约定好。<br>' +
+        '每个页面右下角都有「＋」。</div></div>';
+    }
     h += '<div class="sec-t">今日待办 · ' + todos.length + '</div>';
     if (!todos.length) h += '<div class="card"><div class="empty"><span>🌿</span>今天没有待办，房间状态良好</div></div>';
     else {
