@@ -3,6 +3,7 @@
   'use strict';
 
   var LS = 'roomly.v2';
+  var SEEN = 'roomly.seen.v1';
   var WD = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   var now = new Date();
   var M = now.getMonth() + 1;
@@ -87,7 +88,7 @@
   // 补齐历史数据：早于今天的值日自动标记完成
   S.shifts.forEach(function (s) { if (s.done === undefined) s.done = s.day < todayNum; });
   // 让当前用户今天一定有一项值日（与原负责人对调，全周工作量总量不变）
-  (function () {
+  function ensureTodayTask() {
     var mine = S.shifts.filter(function (s) { return s.day === todayNum && s.u === S.me; });
     if (mine.length) return;
     var t = S.shifts.filter(function (s) { return s.day === todayNum; })[0];
@@ -96,7 +97,8 @@
     var orig = t.u;
     t.u = S.me;
     if (back) back.u = orig;
-  })();
+  }
+  ensureTodayTask();
 
   function save() { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { } }
   function mem(id) { for (var i = 0; i < S.members.length; i++) if (S.members[i].id === id) return S.members[i]; return { name: '?', color: '#999' }; }
@@ -218,6 +220,125 @@
   }
   function lowSupplies() { return S.supplies.filter(function (s) { return s.stock <= 25; }); }
 
+
+  /* ---------- 新手引导 ---------- */
+  var ONB = [
+    { go: 'settle', e: '💸', b: '一键最优结清', s: '4 个人 10 笔交叉欠款，算成 3 笔转账' },
+    { go: 'chores', e: '🧹', b: '按耗时排班，不按次数', s: '刷厕所 25 分钟、倒垃圾 5 分钟，不算一份工' },
+    { go: 'supplies', e: '🧺', b: '买了就自动入账', s: '登记采购直接生成均摊账单，不用开口要钱' }
+  ];
+  function buildOnb() {
+    var h = '<div class="onb-in">' +
+      '<div class="onb-mark onb-anim">屋</div>' +
+      '<h2 class="onb-anim" style="animation-delay:.04s">同屋 ROOMLY</h2>' +
+      '<h1 class="onb-anim" style="animation-delay:.08s">合租生活管家</h1>' +
+      '<p class="onb-sub onb-anim" style="animation-delay:.12s">房租水电怎么摊、这周该谁拖地、<br>纸巾还剩多少、公约谁说了算——<br>合租最容易吵架的四件事，一个地方讲清楚。</p>' +
+      '<div class="onb-t onb-anim" style="animation-delay:.16s">这三处最值得点开看</div><div class="onb-list">';
+    ONB.forEach(function (o, i) {
+      h += '<button class="onb-i onb-anim" data-go="' + o.go + '" style="animation-delay:' + (.2 + i * .05) + 's">' +
+        '<span class="e">' + o.e + '</span><span class="tx"><b>' + o.b + '</b><span>' + o.s + '</span></span>' +
+        '<span class="ar">›</span></button>';
+    });
+    h += '</div><div class="onb-foot onb-anim" style="animation-delay:.36s">' +
+      '<button class="btn" data-onb="tour">开始体验 · 带我看一遍</button>' +
+      '<button class="btn line" data-onb="skip" style="margin-top:9px">跳过讲解，直接用</button>' +
+      '<p>可交互原型 · 记一笔账、打个卡、投一票都会真实生效<br>数据只存在你本机浏览器，可随时在「⋯ 房间」里重置</p>' +
+      '</div></div>';
+    $('onb').innerHTML = h;
+  }
+  function showOnb() { buildOnb(); $('onb').classList.add('on'); }
+
+
+  /* ---------- 功能讲解 ---------- */
+  var TOUR = [
+    {
+      tab: 'home', sel: '.js-todos', title: '首页 · 今天该做什么',
+      why: '合租的事散在微信群里，说完就沉底。首页把「今天轮到你的」「快用完的」「还没结的账」聚合成一屏。',
+      how: '每条右边的按钮可以直接打卡、去登记、去结清，不用自己翻。'
+    },
+    {
+      tab: 'bills', sel: '.fab', title: '账本 · 记一笔',
+      why: '真实的合租账从来不是简单均摊：房租按房间大小、水电按谁在住、聚餐只算吃了的人。',
+      how: '点右下角 ＋ 记一笔。选分类会自动推荐分摊方式，切换方式时下面会实时显示每人该分多少。'
+    },
+    {
+      tab: 'bills', sel: '.js-settle', title: '账本 · 一键最优结清',
+      why: '四个人互相垫付，很快就变成十来笔交叉欠款。谁该转给谁、转多少最省事，得算。',
+      how: '点「一键结清」，系统用债务图简化算出最少转账笔数，转完自动把相关账单销账。钱还是走微信转账。'
+    },
+    {
+      tab: 'chores', sel: '.js-load', title: '值日 · 按耗时排班',
+      why: '刷厕所 25 分钟、倒垃圾 5 分钟，简单轮流看着公平其实不公平。这里按耗时分配，让每人每周的总分钟数接近。',
+      how: '排班表里点「打卡」完成；出差那周点「换班」转给室友。完成自动累积家务币，让付出被看见。'
+    },
+    {
+      tab: 'supplies', sel: '.sup.low', title: '物资 · 买了自动入账',
+      why: '纸巾用完才发现就晚了；自己垫钱买了没人记得，更伤感情。',
+      how: '余量条按消耗速度预测还能用几天，低了自动告急。点「我买了」填个金额，系统自动生成一笔均摊账单进账本。'
+    },
+    {
+      tab: 'pact', sel: '.vote', title: '公约 · 提案投票生效',
+      why: '规矩要在吵架之前定好，而且得有生效流程——不能谁先住进来谁说了算。',
+      how: '任何人都能发起提案，全员投票，3/4 同意立刻生效并写进条款；新室友入住自动适用。'
+    }
+  ];
+  var tourI = -1;
+  function tourClear() {
+    [].forEach.call(document.querySelectorAll('.tour-hi,.tour-hi-rel'), function (e) {
+      e.classList.remove('tour-hi'); e.classList.remove('tour-hi-rel');
+    });
+  }
+  function tourEnd() {
+    tourClear(); tourI = -1;
+    document.body.classList.remove('tour-on');
+    $('tour').classList.remove('on'); $('tour').innerHTML = '';
+    try { localStorage.setItem(SEEN, '1'); } catch (e) { }
+  }
+  function tourShow(i) {
+    if (i < 0) i = 0;
+    if (i >= TOUR.length) {
+      tourEnd(); render();
+      toast('讲解结束 · 现在随便点<br><span style="font-size:11.5px;opacity:.7">记一笔账、打个卡、投一票都会真实生效</span>');
+      return;
+    }
+    tourI = i;
+    var s = TOUR[i];
+    $('onb').classList.remove('on');
+    document.body.classList.add('tour-on');
+    S.tab = s.tab; render();
+    tourClear();
+    setTimeout(function () {
+      var el = s.sel ? document.querySelector(s.sel) : null;
+      var t = $('tour');
+      t.classList.remove('top');
+      if (!el) return;
+      el.classList.add('tour-hi');
+      if (getComputedStyle(el).position === 'static') el.classList.add('tour-hi-rel');
+      // 只滚动内容区；scrollIntoView 会连 overflow:hidden 的外壳一起滚，必须复位
+      var box0 = document.querySelector('.device-screen');
+      if (el.closest('.screen')) { try { el.scrollIntoView({ block: 'center' }); } catch (e) { } }
+      box0.scrollTop = 0; box0.scrollLeft = 0;
+      // 卡片避让：目标落在下半屏时，把讲解卡移到顶部，别挡住要点的按钮
+      var r = el.getBoundingClientRect();
+      var box = document.querySelector('.device-screen').getBoundingClientRect();
+      if (r.bottom > box.bottom - t.offsetHeight - 18) t.classList.add('top');
+    }, 40);
+    var dots = '';
+    TOUR.forEach(function (x, k) { dots += '<i class="' + (k === i ? 'on' : '') + '"></i>'; });
+    $('tour').innerHTML =
+      '<div class="tour-c">' +
+      '<div class="tour-step">第 ' + (i + 1) + ' / ' + TOUR.length + ' 步</div>' +
+      '<h4>' + s.title + '</h4>' +
+      '<div class="tour-l"><b>做什么用</b><span>' + s.why + '</span></div>' +
+      '<div class="tour-l"><b>怎么操作</b><span>' + s.how + '</span></div>' +
+      '<div class="tour-b"><span class="tour-dots">' + dots + '</span>' +
+      '<button class="tour-skip" data-t="skip">跳过</button>' +
+      (i > 0 ? '<button class="tour-prev" data-t="prev">上一步</button>' : '') +
+      '<button class="tour-next" data-t="next">' + (i === TOUR.length - 1 ? '开始使用' : '下一步') + '</button>' +
+      '</div></div>';
+    $('tour').classList.add('on');
+  }
+
   /* ---------- 渲染：顶栏 ---------- */
   function renderTop() {
     var avs = S.members.map(function (m) { return avatar(m.id); }).join('');
@@ -263,7 +384,7 @@
     h += '<div class="sec-t">今日待办 · ' + todos.length + '</div>';
     if (!todos.length) h += '<div class="card"><div class="empty"><span>🌿</span>今天没有待办，房间状态良好</div></div>';
     else {
-      h += '<div class="card tight">';
+      h += '<div class="card tight js-todos">';
       todos.slice(0, 5).forEach(function (t) {
         h += '<div class="todo"><div class="e" style="background:' + t.bg + '">' + t.e + '</div>' +
           '<div class="tx"><b>' + esc(t.b) + '</b><span>' + esc(t.s) + '</span></div>' +
@@ -317,7 +438,7 @@
     h += '<div class="card" style="padding:13px 14px">' +
       '<div style="display:flex;gap:10px;align-items:center">' +
       '<div style="flex:1;font-size:12.5px;color:var(--ink3);line-height:1.6">待收 <b style="color:var(--teal)">' + yuan(get) + '</b> · 待付 <b style="color:var(--brand)">' + yuan(owe) + '</b></div>' +
-      '<button class="btn sm" onclick="A.settle()">一键结清</button></div></div>';
+      '<button class="btn sm js-settle" onclick="A.settle()">一键结清</button></div></div>';
 
     h += '<div class="sec-t">' + M + ' 月账单 · ' + S.bills.length + ' 笔<span class="more" onclick="A.moveOut()">退租结算单</span></div><div class="card tight">';
     S.bills.slice().reverse().forEach(function (b) {
@@ -355,7 +476,7 @@
       (mine.length - mineLeft.length) + ' / ' + mine.length + ' 已完成</div>' +
       '<div style="font-size:11.5px;color:#9C938D">合计 ' + loadOf(me) + ' 分钟 · 全屋本周共 ' + totalMin + ' 分钟</div></div>';
 
-    h += '<div class="sec-t">本周工作量是否均衡<span class="more" onclick="A.fairInfo()">排班规则</span></div><div class="card tight" style="padding:8px 0">';
+    h += '<div class="sec-t">本周工作量是否均衡<span class="more" onclick="A.fairInfo()">排班规则</span></div><div class="card tight js-load" style="padding:8px 0">';
     loads.forEach(function (l) {
       h += '<div class="load-bar"><span class="n">' + esc(l.n) + '</span>' +
         '<span class="b"><i style="width:' + Math.round(l.v / maxL * 100) + '%;background:' + l.c + '"></i><em>' + l.v + ' 分钟</em></span>' +
@@ -508,6 +629,16 @@
   /* ---------- 交互 ---------- */
   var A = {
     go: function (tab) { S.tab = tab; render(); },
+
+    onbGo: function (go) {
+      $('onb').classList.remove('on');
+      try { localStorage.setItem(SEEN, '1'); } catch (e) { }
+      if (go === 'tour') { tourShow(0); return; }
+      if (go === 'settle') { S.tab = 'bills'; render(); setTimeout(function () { A.settle(); }, 280); }
+      else if (go && go !== 'skip') { S.tab = go; render(); }
+    },
+    onbShow: function () { closeSheet(); showOnb(); },
+    tourStart: function () { closeSheet(); $('onb').classList.remove('on'); tourShow(0); },
 
     /* 值日 */
     checkIn: function (id) {
@@ -856,7 +987,10 @@
         '<div class="split-line"><span>账单结清截止日</span><span class="m">每月 10 日</span></div>' +
         '<div class="split-line"><span>催收方式</span><span class="m">管家统一提醒</span></div></div>';
       h += '<button class="btn ghost" onclick="A.invite()">邀请新室友</button>' +
-        '<button class="btn line" onclick="A.reset()">重置演示数据</button>';
+        '<button class="btn line" onclick="A.tourStart()">重看功能讲解</button>' +
+        '<button class="btn line" onclick="A.onbShow()">重看欢迎页</button>' +
+        '<button class="btn line" onclick="A.reset()">重置演示数据</button>' +
+        '<button class="btn line" onclick="A.resetAll()">恢复到「首次打开」状态</button>';
       sheet('房间设置', h);
     },
     invite: function () {
@@ -864,10 +998,21 @@
       toast('🔗 邀请链接已生成<br><span style="font-size:11.5px;opacity:.7">室友点开即可查看账单并确认，无需注册下载</span>');
     },
     reset: function () {
-      localStorage.removeItem(LS);
+      try { localStorage.removeItem(LS); } catch (e) { }
       S = seed();
       S.shifts.forEach(function (s) { s.done = s.day < todayNum; });
-      closeSheet(); render(); toast('↺ 演示数据已重置');
+      ensureTodayTask();
+      closeSheet(); render();
+      toast('↺ 演示数据已恢复初始状态');
+    },
+    resetAll: function () {
+      try { localStorage.removeItem(LS); localStorage.removeItem(SEEN); } catch (e) { }
+      S = seed();
+      S.shifts.forEach(function (s) { s.done = s.day < todayNum; });
+      ensureTodayTask();
+      tourEnd(); closeSheet(); S.tab = 'home'; render();
+      try { localStorage.removeItem(SEEN); } catch (e) { }
+      showOnb();
     }
   };
   window.A = A;
@@ -876,6 +1021,20 @@
   $('tabbar').addEventListener('click', function (e) {
     var t = e.target.closest('.tab'); if (!t) return;
     S.tab = t.dataset.tab; render();
+  });
+  $('onb').addEventListener('click', function (e) {
+    var b = e.target.closest('.onb-i');
+    if (b) { A.onbGo(b.dataset.go); return; }
+    var f = e.target.closest('[data-onb]');
+    if (f) A.onbGo(f.dataset.onb);
+  });
+  $('tour').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-t]');
+    if (!b) return;
+    var t = b.dataset.t;
+    if (t === 'skip') { tourEnd(); render(); }
+    else if (t === 'prev') tourShow(tourI - 1);
+    else tourShow(tourI + 1);
   });
   $('mask').addEventListener('click', closeSheet);
   $('sheetClose').addEventListener('click', closeSheet);
@@ -894,5 +1053,9 @@
     render();
     var sh = q.get('sheet');
     if (sh && A[sh]) A[sh]();
+    var seen = false;
+    try { seen = !!localStorage.getItem(SEEN); } catch (e) { }
+    if (!seen && !sh && !q.get('tab')) showOnb();
+    if (q.get('onb')) showOnb();
   } catch (e) { render(); }
 })();
